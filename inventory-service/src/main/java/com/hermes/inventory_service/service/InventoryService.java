@@ -6,6 +6,7 @@ import com.hermes.inventory_service.dto.ProductResponse;
 import com.hermes.inventory_service.exception.ResourceNotFoundException;
 import com.hermes.inventory_service.model.Inventory;
 import com.hermes.inventory_service.repository.InventoryRepository;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatusCode;
@@ -23,6 +24,7 @@ public class InventoryService {
     private final InventoryRepository inventoryRepository;
     private final WebClient.Builder webClientBuilder;
 
+    @CircuitBreaker(name = "productServiceCircuitBreaker", fallbackMethod = "productServiceFallback")
     public void createInventory(String skuCode, InventoryRequest inventoryRequest) {
         ProductResponse productResponse = webClientBuilder.build()
                 .get()
@@ -54,12 +56,14 @@ public class InventoryService {
         return inventories.stream().map(this::mapToInventoryResponse).toList();
     }
 
+    @CircuitBreaker(name = "productServiceCircuitBreaker", fallbackMethod = "productServiceFallback")
     public InventoryResponse getInventoryBySkuCode(String skuCode) {
         Inventory inventory = inventoryRepository.findBySkuCode(skuCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Inventory not found with SKU code: " + skuCode));
         return mapToInventoryResponse(inventory);
     }
 
+    @CircuitBreaker(name = "productServiceCircuitBreaker", fallbackMethod = "productServiceFallback")
     public InventoryResponse updateInventory(String skuCode, InventoryRequest inventoryRequest) {
         Inventory inventory = inventoryRepository.findBySkuCode(skuCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Inventory not found with SKU code: " + skuCode));
