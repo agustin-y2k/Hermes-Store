@@ -41,34 +41,12 @@ public class InventoryController {
         }
     }
 
-    @PostMapping("/{skuCode}")
-    @Operation(summary = "Create a new inventory")
-    public ResponseEntity<Object> createInventory(@PathVariable String skuCode, @Valid @RequestBody InventoryRequest inventoryRequest) {
+    @PutMapping("/{skuCode}/quantity")
+    @Operation(summary = "Update quantity of an existing inventory")
+    public ResponseEntity<Object> updateQuantity(@PathVariable String skuCode, @Valid @RequestBody InventoryRequest inventoryRequest) {
         try {
-            inventoryService.createInventory(skuCode, inventoryRequest);
-            return ResponseEntity.status(HttpStatus.CREATED).body("Inventory created successfully");
-        } catch (IllegalArgumentException ex) {
-            return new ResponseEntity<>(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), ex.getMessage()), HttpStatus.BAD_REQUEST);
-        }
-    }
-
-    @PutMapping("/{skuCode}")
-    @Operation(summary = "Update an existing inventory")
-    public ResponseEntity<Object> updateInventory(@PathVariable String skuCode, @Valid @RequestBody InventoryRequest inventoryRequest) {
-        try {
-            InventoryResponse updatedInventory = inventoryService.updateInventory(skuCode, inventoryRequest);
+            InventoryResponse updatedInventory = inventoryService.updateQuantity(skuCode, inventoryRequest.quantity());
             return ResponseEntity.ok(updatedInventory);
-        } catch (ResourceNotFoundException ex) {
-            return new ResponseEntity<>(new ErrorResponse(HttpStatus.NOT_FOUND.value(), ex.getMessage()), HttpStatus.NOT_FOUND);
-        }
-    }
-
-    @DeleteMapping("/{skuCode}")
-    @Operation(summary = "Delete an inventory by SKU code")
-    public ResponseEntity<Object> deleteInventory(@PathVariable String skuCode) {
-        try {
-            inventoryService.deleteInventory(skuCode);
-            return ResponseEntity.noContent().build();
         } catch (ResourceNotFoundException ex) {
             return new ResponseEntity<>(new ErrorResponse(HttpStatus.NOT_FOUND.value(), ex.getMessage()), HttpStatus.NOT_FOUND);
         }

@@ -43,5 +43,4 @@
             <artifactId>micrometer-tracing-bridge-brave</artifactId>
         </dependency>
     </dependencies>
-
 </project>

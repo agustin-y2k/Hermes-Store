@@ -7,11 +7,14 @@ import com.hermes.product_service.model.Product;
 import com.hermes.product_service.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+
+import static com.hermes.product_service.config.RabbitMQConfig.*;
 
 @Service
 @RequiredArgsConstructor
@@ -19,16 +22,15 @@ import java.util.Optional;
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final RabbitTemplate rabbitTemplate;
 
     public void createProduct(ProductRequest productRequest) {
-        // Check if product with the same SKU code already exists
         Optional<Product> existingProduct = productRepository.findBySkuCode(productRequest.skuCode());
         if (existingProduct.isPresent()) {
             log.error("Product with SKU code {} already exists", productRequest.skuCode());
             throw new IllegalArgumentException("Product with SKU code " + productRequest.skuCode() + " already exists");
         }
 
-        // If not exists, create and save the new product
         Product product = Product.builder()
                 .skuCode(productRequest.skuCode())
                 .name(productRequest.name())
@@ -41,6 +43,8 @@ public class ProductService {
 
         productRepository.save(product);
         log.info("Product {} is saved", product.getId());
+
+        rabbitTemplate.convertAndSend(PRODUCT_CREATED_QUEUE, productRequest.skuCode());
     }
 
     public List<ProductResponse> getAllProducts() {
@@ -60,11 +64,24 @@ public class ProductService {
         return mapToProductResponse(product);
     }
 
+    public ProductResponse getProductByName(String name) {
+        Product product = productRepository.findByName(name)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with name: " + name));
+        return mapToProductResponse(product);
+    }
+
+    public ProductResponse getProductByPrice(Double price) {
+        Product product = productRepository.findByPrice(price)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with price: " + price));
+        return mapToProductResponse(product);
+    }
+
     public ProductResponse updateProduct(String id, ProductRequest productRequest) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
 
-        // Check if the new SKU code already exists
+        String oldSkuCode = product.getSkuCode();
+
         if (!product.getSkuCode().equals(productRequest.skuCode())) {
             Optional<Product> existingProductWithNewSku = productRepository.findBySkuCode(productRequest.skuCode());
             if (existingProductWithNewSku.isPresent()) {
@@ -80,26 +97,19 @@ public class ProductService {
         product.setUpdatedAt(LocalDateTime.now());
 
         productRepository.save(product);
+
+        SkuUpdateMessage skuUpdateMessage = new SkuUpdateMessage(oldSkuCode, productRequest.skuCode());
+        rabbitTemplate.convertAndSend(PRODUCT_UPDATED_QUEUE, skuUpdateMessage);
+
         return mapToProductResponse(product);
     }
 
     public void deleteProduct(String id) {
-        if (!productRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Product not found with id: " + id);
-        }
-        productRepository.deleteById(id);
-    }
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
 
-    public ProductResponse getProductByName(String name) {
-        Product product = productRepository.findByName(name)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found with name: " + name));
-        return mapToProductResponse(product);
-    }
-
-    public ProductResponse getProductByPrice(Double price) {
-        Product product = productRepository.findByPrice(price)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found with price: " + price));
-        return mapToProductResponse(product);
+        productRepository.delete(product);
+        rabbitTemplate.convertAndSend(PRODUCT_DELETED_QUEUE, product.getSkuCode());
     }
 
     private ProductResponse mapToProductResponse(Product product) {
